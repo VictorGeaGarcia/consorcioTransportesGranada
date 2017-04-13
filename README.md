@@ -9,5 +9,7 @@ Este repositorio consiste de 3 módulos:
   Segundo modulo: hacemos "scrapping" a los horarios de cada línea utilizando links obtenidos con el primer módulo.
   Tercer modulo:  hacemos "scrapping" a los itinerarios de cada línea utilizando links obtenidos con el primer módulo.
 
+Al correr el segundo y tercer módulo se obtiene un archivo .csv para cada trayecto y línea  (dos archivos de horarios por linea y otros dos de itinerario por linea). El nombre del archivo en cada caso empieza con el "número utilizado para identificar la web que hay scrapear en cada caso. Se puede ver la correspondencia de este numero con el número oficial de la línea en el archivo Consorcio_Lineas_Granada.csv.
+
 ### Datos
-Los datos publicados utilizando los modulos de scrapeo anteriormente mencionados son de 03/2017, por lo que no contemplan variaciones posteriores que el consorcio haya realizado sobre los mismos.
+Los datos publicados utilizando los modulos de scrapeo anteriormente mencionados son de 03/2017, por lo que no contemplan variaciones posteriores que el consorcio haya realizado sobre los mismos
