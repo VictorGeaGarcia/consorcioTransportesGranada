@@ -1,36 +1,48 @@
+import sqlite3
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
+
+from utilities.getting_soup_from_web import BSoup
+
+def consorcio_db(consorcio_bus_linesDF):
+    '''DB CREATION WHERE GENERAL DATA ABOUT LINES IS INSERTED'''
+    conn_CTMGR = sqlite3.connect('..\datos\ConsorcioGR.db')
+    table_name = 'crawling_info_CTMGR'
+    
+    consorcio_bus_linesDF.to_sql(table_name,  conn_CTMGR, index = False)
+    conn_CTMGR.commit()
+    conn_CTMGR.close()
+    
+def crawl_general_CTMGR():
+    '''WEB CRAWLING A LA PAGINA GENERAL DE CTMGRANADA PARA SACAR INFO DE
+       LAS bus_lineS PARA DESPUES PODER HACERLE UN CRAWLING A CADA UNA
+       DE ELLAS'''
+    #Get DF ready
+    consorcio_bus_linesDF = pd.DataFrame(
+        columns=['url','bus_line_web_code',  'bus_line_number',  'bus_line_name',
+                 'bus_line_enterprise'])
+
+    url = 'http://siu.ctagr.com/es/lineas.php'
+    soup = BSoup(url)
+    soup = soup.find_all('li', 'cercanias')
+
+    #Iterate over bus_lines and insert them into the DF
+    index = 0
+    for bus_line in soup:
+        url = bus_line.find('a').get('href').strip()
+        bus_line_web_code = bus_line.find('a').get('href').strip()
+        bus_line_web_code = (bus_line_web_code.split('linea='))[1]
+        bus_line_number = (bus_line.find_all('span',  'grid_2'))[1].text.strip()
+        bus_line_name = bus_line.find('span',  'grid_5 destacado').text.strip()
+        bus_line_enterprise = bus_line.find('span',  'grid_4').text.strip()
+        consorcio_bus_linesDF.loc[index] = [url,  bus_line_web_code,
+                                            bus_line_number,  bus_line_name,
+                                            bus_line_enterprise]
+        index +=1
+
+    #Insert values to db
+    #print(consorcio_bus_linesDF)
+    consorcio_db(consorcio_bus_linesDF)
 
 
-#WEB CRAWLING A LA PAGINA GENERAL DE CTMGRANADA PARA SACAR INFO DE
-#LAS LINEAS PARA DESPUES PODER HACERLE UN CRAWLING A CADA UNA DE ELLAS
-
-#Preparamos el DF
-consorcio_lineasDF = pd.DataFrame(columns=['Web','NumLineaWeb','Numero Linea','Nombre Linea','Empresa'])
-
-#Crawl a URL, limpieza y pase a BeautifulSoup
-url_todas_lineas = 'http://siu.ctagr.com/es/lineas.php'
-source_code_todas_lineas = requests.get(url_todas_lineas)
-plain_text_todas_lineas = source_code_todas_lineas.text
-soup_todas_lineas = BeautifulSoup(plain_text_todas_lineas)
-soup_todas_lineas = soup_todas_lineas.find_all('li','cercanias')
-
-#Recorremos una a una las lineas y las metemos en el DF
-index = 0
-for linea in soup_todas_lineas:
-    web = linea.find('a').get('href').strip()
-    numlineaweb = (linea.find('a').get('href').strip().split('linea='))[1]
-    numero_linea = (linea.find_all('span','grid_2'))[1].text.strip()
-    nombre_linea = linea.find('span','grid_5 destacado').text.strip()
-    empresa = linea.find('span','grid_4').text.strip()
-    consorcio_lineasDF.loc[index] = [web,numlineaweb,numero_linea,nombre_linea,empresa]
-    index +=1
-
-#Imprimimos y sacamos CSV
-print(consorcio_lineasDF)
-consorcio_lineasDF.to_csv('Consorcio_Lineas_Granada.csv')
-
-
-
+crawl_general_CTMGR()
 

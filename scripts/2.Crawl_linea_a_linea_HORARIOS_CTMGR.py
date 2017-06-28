@@ -1,139 +1,111 @@
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
+import sqlite3
 
-#Leemos CSV que nos interesa para ir haciendo Crawl linea a linea
-consorcio_lineasDF = pd.read_csv ('Consorcio_Lineas_Granada.csv',index_col = 'Unnamed: 0')
-lineas = consorcio_lineasDF.NumLineaWeb.values
+from utilities.getting_soup_from_web import BSoup
 
-for linea in lineas:
-    #print(linea)
-    url = 'http://siu.ctagr.com/es/horarios_lineas_tabla.php?from=1&linea={}'.format(linea)
-    source_code = requests.get(url)
-    plain_text = source_code.text
-    soup = BeautifulSoup(plain_text)
-    #print(soup)
+def fill_db(bus_line, one_way_or_return, timetableDF):
+    '''FILL CONSORCIOGR.DB WITH TIMETABLE FOR EACH BUS LINE'''
+    db_name = 'ConsorcioGR.db'
+    table_name = 'timetable_{0}_{1}_CTMGR'.format(bus_line, one_way_or_return)
+    conn_CTMGR = sqlite3.connect(db_name)
+    timetableDF.to_sql(table_name, conn_CTMGR, index= False)
+    conn_CTMGR.commit()
+    conn_CTMGR.close()
+    
+def crawl_timetables(bus_line, timetable, one_way_or_return):
+    '''CRAWL WEBPAGES AND FILLS DF WITH TIMETABLES'''
+    timetableDF = pd.DataFrame()
+    bus_line_stops = []
+    timetable_list = []
+    second_header_control = False
+    for i,x in enumerate(timetable):
+        if i == 0:
+            # Town names
+            x = x.find_all('div')
+            bus_line_stops_len = len(x)
+            for bus_line_stop in x:
+                bus_line_stops.append(bus_line_stop.text)
+            if (bool(x) == False):
+                #Some tables have two header levels
+                second_header_control = True
+            timetableDF = timetableDF.append(
+                pd.DataFrame(bus_line_stops).T)
+            bus_line_stops = []
+        if (second_header_control and (i == 1)):
+            #Town name in case there was header
+            x = x.find_all('div')
+            bus_line_stops_len = len(x)
+            for bus_line_stop in x:
+                bus_line_stops.append(bus_line_stop.text)
+            timetableDF = timetableDF.append(
+                pd.DataFrame(bus_line_stops).T)
+            bus_line_stops = []
+        if (not second_header_control and (i >= 1)):
+            #Timetable 
+            for d in x.find_all('td')[0:bus_line_stops_len]:
+                timetable_list.append(d.text)
+            timetableDF = timetableDF.append(
+                pd.DataFrame(timetable_list).T)
+            timetable_list = []
+        elif(second_header_control and (i>=2)):
+            #Timetable in case there was header
+            for d in x.find_all('td')[0:bus_line_stops_len]:
+                timetable_list.append(d.text)
+            timetableDF = timetableDF.append(
+                pd.DataFrame(timetable_list).T)
+            timetable_list = []
+##    timetableDF.to_csv(csv_name)
+    fill_db(bus_line, one_way_or_return, timetableDF)
 
-    horarios = soup.find(id = 'recorrido_din').find_all('table')
-    ##print(horarios)
-
-    if (len(horarios)>=2): #Hubo al menos una linea que solo tenia los datos de ida ,
-                            #por lo tanto si no se mete este if
-                            #daria error
-        ida_horariosDF = pd.DataFrame()
-        lista_nucleos = []
-        lista_horarios = []
-        control_segunda_cabecera = False
-        
-
-        ida_table = horarios[0].find_all('tr')
-        for i,x in enumerate(ida_table):
-            if i == 0: # Nombres de los pueblos de IDA
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                if (bool(x) == False): #Nos aseguramos de que ha cogido los valores que debia
-                                       #Es porque en algunas tablas hay dos niveles para las cabeceras
-                    control_segunda_cabecera = True
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (control_segunda_cabecera and (i==1)):#Nombre de los pueblos de ida si habia cabecera
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (not control_segunda_cabecera and (i >= 1)):#Horario pueblos ida
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-            elif(control_segunda_cabecera and (i>=2)):#Horario de los pueblos de ida si habia cabecera
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-
-        #print(ida_horariosDF)
-        ida_horariosDF.to_csv('/{}_ida_horario_CTMGR.csv'.format(linea))
-
-        vuelta_horariosDF = pd.DataFrame()
-        lista_nucleos = []
-        lista_horarios = []
-        control_segunda_cabecera = False
-
-        vuelta_table = horarios[1].find_all('tr')
-        for i,x in enumerate(vuelta_table):
-            if i == 0: # Nombres de los pueblos de IDA
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                if (bool(x) == False): #Nos aseguramos de que ha cogido los valores que debia
-                                       #Es porque en algunas tablas hay dos niveles para las cabeceras
-                    control_segunda_cabecera = True
-                vuelta_horariosDF = vuelta_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (control_segunda_cabecera and (i==1)):#Nombre de los pueblos de ida si habia cabecera
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                vuelta_horariosDF = vuelta_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (not control_segunda_cabecera and (i >= 1)):#Horario pueblos ida
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                vuelta_horariosDF = vuelta_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-            elif(control_segunda_cabecera and (i>=2)):#Horario de los pueblos de ida si habia cabecera
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                vuelta_horariosDF = vuelta_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-
-        #print(vuelta_horariosDF)
-        vuelta_horariosDF.to_csv('{}_vuelta_horario_CTMGR.csv'.format(linea))
+def obtain_timetables (timetable_soup, bus_line, one_way_or_return):
+    '''CHECK THAT IT IS POSSIBLE TO CRAWL AND CALLS CRAWLING FUNCTION
+       PASSING IT THE RIGHT SOUP(ONE_WAY OR RETURN)'''
+    try:
+        if one_way_or_return == 'oneway':
+            timetable = timetable_soup[0].find_all('tr')
+        elif one_way_or_return == 'return':
+            timetable = timetable_soup[1].find_all('tr')
+    except IndexError:
+        file_name = 'filling_consorcio_db_log.txt'
+        with open(file_name, 'r+') as f_obj:
+            f_obj.write('\nLine {0} NOT FOUND FOR RETURN WAY')
     else:
-        #print('La linea(numlineaweb ',linea,' solo tiene una tabla')
-        ida_horariosDF = pd.DataFrame()
-        lista_nucleos = []
-        lista_horarios = []
-        control_segunda_cabecera = False
+        crawl_timetables(bus_line, timetable, one_way_or_return)
         
-
-        ida_table = horarios[0].find_all('tr')
-        for i,x in enumerate(ida_table):
-            if i == 0: # Nombres de los pueblos de IDA
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                if (bool(x) == False): #Nos aseguramos de que ha cogido los valores que debia
-                                       #Es porque en algunas tablas hay dos niveles para las cabeceras
-                    control_segunda_cabecera = True
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (control_segunda_cabecera and (i==1)):#Nombre de los pueblos de ida si habia cabecera
-                x = x.find_all('div')
-                num_nucleos = len(x)
-                for nucleo in x:
-                    lista_nucleos.append(nucleo.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_nucleos).T)
-                lista_nucleos = []
-            if (not control_segunda_cabecera and (i >= 1)):#Horario pueblos ida
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-            elif(control_segunda_cabecera and (i>=2)):#Horario de los pueblos de ida si habia cabecera
-                for d in x.find_all('td')[0:num_nucleos]:
-                    lista_horarios.append(d.text)
-                ida_horariosDF = ida_horariosDF.append(pd.DataFrame(lista_horarios).T)
-                lista_horarios = []
-
-        #print(ida_horariosDF)
-        ida_horariosDF.to_csv('{}_ida_horario_CTMGR.csv'.format(linea))        
+def read_csv():
+    '''READS CSV WITH GENERAL DATA NEEDED FOR CRAWLING AND RETURNS
+       WEB_CODES FOR EACH LINE'''
+    encoding_library = ['iso-8859-1',  'latin1',  'cp1252',  'utf-8']
+    for encoding in encoding_library:
+        try:
+            consorcio_bus_linesDF = pd.read_csv (
+                '..\datos\Consorcio_bus_lines_Granada.csv',
+                index_col = 'Unnamed: 0',  encoding='iso-8859-1')
+        except UnicodeDecodeError:
+            print('Encoding with {0} didn\'t work'.format(encoding))
+        else:
+            print('Encoding with {0} succesful'.format(encoding))
+            break
+    return consorcio_bus_linesDF.bus_line_web_code.values
+    
+def main():
+    '''GETS LIST OF WEB_CODES NEEDED TO CRAWL. FOR EACH LINE GETS ITS
+       SOUP AND CALLS FUNCTION TO OBTAIN TIMETABLES ONE OR TWO TIMES
+       (DEPENDING ON IF THERE IS RETURN OR NOT'''
+    bus_lines = read_csv()
+    for bus_line in bus_lines:
+        print(bus_line)
+        url = 'http://siu.ctagr.com/es/horarios_lineas_tabla.php?from=1&linea={0}'
+        url = url.format(bus_line)
+        soup = BSoup(url)
+        timetable_soup = soup.find(id = 'recorrido_din').find_all('table')
         
+        if (len(timetable_soup)>=2):
+            #Some lines only have one_way data
+            obtain_timetables(timetable_soup, bus_line, 'oneway')
+            obtain_timetables(timetable_soup, bus_line, 'return')
+
+        else:       
+            obtain_timetables(timetable_soup, bus_line, 'oneway')
+    
+main()
